@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@meeting-ai-kit/shared": ["packages/shared/src/index.ts"],
+      "@meeting-ai-kit/asr-adapter": ["packages/asr-adapter/src/index.ts"],
+      "@meeting-ai-kit/llm-adapter": ["packages/llm-adapter/src/index.ts"],
+      "@meeting-ai-kit/feishu-cli-adapter": ["packages/feishu-cli-adapter/src/index.ts"],
+      "@meeting-ai-kit/visual-renderer": ["packages/visual-renderer/src/index.ts"]
+    }
+  }
+}

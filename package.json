@@ -1,0 +1,26 @@
+{
+  "name": "meeting-ai-kit",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.17.1",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @meeting-ai-kit/web --filter @meeting-ai-kit/api dev",
+    "dev:web": "pnpm --filter @meeting-ai-kit/web dev",
+    "dev:api": "pnpm --filter @meeting-ai-kit/api dev",
+    "db:start": "bash scripts/db-start.sh",
+    "db:stop": "bash scripts/db-stop.sh",
+    "db:push": "prisma db push --schema prisma/schema.prisma",
+    "test:smoke": "bash scripts/smoke-test.sh",
+    "typecheck": "pnpm -r typecheck",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:validate": "prisma validate --schema prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.0.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.0.0",
+    "typescript": "^5.6.0"
+  }
+}

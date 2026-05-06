@@ -1,0 +1,24 @@
+{
+  "workspace": "/Users/caifeiya/Documents/智能会议/.presentation-work/ai-agent-architecture",
+  "pptx": "/Users/caifeiya/Documents/智能会议/.presentation-work/ai-agent-architecture/output/output.pptx",
+  "checks": {
+    "pptx_package": {
+      "slide_count": 1,
+      "media_count": 0,
+      "chart_count": 0,
+      "zero_byte_media": [],
+      "invalid_png_media": [],
+      "placeholder_text": [],
+      "debug_line_colors": [],
+      "slide_numbers": [],
+      "warnings": [],
+      "failures": []
+    },
+    "output_hygiene": {
+      "output_dir": "/Users/caifeiya/Documents/智能会议/.presentation-work/ai-agent-architecture/output",
+      "unexpected_files": []
+    }
+  },
+  "failures": [],
+  "warnings": []
+}

@@ -1,0 +1,291 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MeetingStatus {
+  draft
+  recording
+  recorded
+  generating
+  generated
+  rendering
+  ready_to_publish
+  publishing
+  published
+  failed
+}
+
+model Meeting {
+  id                   String              @id @default(cuid())
+  ownerUserId          String?
+  title                String
+  meetingType          String
+  inputMode            String              @default("record")
+  projectName          String?
+  startTime            DateTime?
+  endTime              DateTime?
+  status               MeetingStatus       @default(draft)
+  participants         Json
+  summaryModelConfigId String
+  visualTemplateId     String
+  feishuFolder         String?
+  feishuDocUrl         String?
+  yuqueRepoNamespace   String?
+  yuquePublicLevel     Int?
+  yuqueDocUrl          String?
+  lastError            String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  owner                User?               @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  transcriptSegments   TranscriptSegment[]
+  recordingAssets      RecordingAsset[]
+  meetingMinutes       MeetingMinutes[]
+  visualReports        VisualReport[]
+  actionItems          ActionItem[]
+  feishuPublishLogs    FeishuPublishLog[]
+  yuquePublishLogs     YuquePublishLog[]
+
+  @@index([projectName])
+  @@index([meetingType])
+  @@index([inputMode])
+  @@index([status])
+  @@index([ownerUserId])
+  @@map("meetings")
+}
+
+model User {
+  id             String        @id @default(cuid())
+  provider       String        @default("email")
+  providerUserId String
+  unionId        String?
+  openId         String?
+  name           String
+  avatarUrl      String?
+  email          String?
+  mobile         String?
+  passwordHash   String?
+  emailVerifiedAt DateTime?
+  isActive       Boolean       @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  meetings       Meeting[]
+  sessions       AuthSession[]
+  emailCodes     EmailVerificationCode[]
+
+  @@unique([provider, providerUserId])
+  @@index([unionId])
+  @@index([email])
+  @@map("users")
+}
+
+model EmailVerificationCode {
+  id          String    @id @default(cuid())
+  userId      String?
+  email       String
+  purpose     String
+  codeHash    String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  attempts    Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email, purpose])
+  @@index([expiresAt])
+  @@map("email_verification_codes")
+}
+
+model AuthSession {
+  id           String   @id @default(cuid())
+  userId       String
+  tokenHash    String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("auth_sessions")
+}
+
+model RecordingAsset {
+  id           String   @id @default(cuid())
+  meetingId    String
+  filename     String
+  originalName String?
+  mimeType     String
+  sizeBytes    Int
+  durationMs   Int?
+  storagePath  String
+  publicUrl    String
+  createdAt    DateTime @default(now())
+
+  meeting      Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@map("recording_assets")
+}
+
+model TranscriptSegment {
+  id         String   @id @default(cuid())
+  meetingId  String
+  index      Int
+  speaker    String?
+  startMs    Int?
+  endMs      Int?
+  text       String
+  isFinal    Boolean  @default(true)
+  provider   String
+  rawPayload Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  meeting    Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, index])
+  @@index([meetingId, index])
+  @@map("transcript_segments")
+}
+
+model MeetingMinutes {
+  id              String   @id @default(cuid())
+  meetingId       String
+  rawTranscript   String
+  structuredJson  Json
+  markdownContent String
+  feishuDocBlocks Json
+  modelConfigId   String
+  promptVersion   String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  meeting         Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@map("meeting_minutes")
+}
+
+model VisualReport {
+  id         String   @id @default(cuid())
+  meetingId  String
+  templateId String
+  visualJson Json
+  htmlPath   String?
+  imagePath  String?
+  imageUrl   String?
+  width      Int
+  scale      Float
+  createdAt  DateTime @default(now())
+
+  meeting    Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@map("visual_reports")
+}
+
+model ActionItem {
+  id                 String   @id @default(cuid())
+  meetingId          String
+  action             String
+  owner              String
+  dueDate            String
+  status             String
+  evidenceSegmentIds Json
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  meeting            Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@index([owner])
+  @@index([status])
+  @@map("action_items")
+}
+
+model ModelConfig {
+  id              String   @id @default(cuid())
+  ownerUserId     String?
+  name            String
+  provider        String
+  baseUrl         String
+  apiKeyEncrypted String
+  model           String
+  temperature     Float
+  maxTokens       Int
+  jsonMode        Boolean  @default(true)
+  timeoutMs       Int      @default(240000)
+  retryCount      Int      @default(1)
+  enabled         Boolean  @default(true)
+  isDefault       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([provider])
+  @@index([enabled])
+  @@index([ownerUserId])
+  @@map("model_configs")
+}
+
+model MeetingTypeConfig {
+  id                          String   @id @default(cuid())
+  ownerUserId                 String?
+  name                        String
+  key                         String
+  defaultSummaryModelConfigId String
+  defaultVisualTemplateId     String
+  defaultFeishuFolder         String
+  promptTemplateId            String
+  enabled                     Boolean  @default(true)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  @@index([enabled])
+  @@index([ownerUserId])
+  @@map("meeting_type_configs")
+}
+
+model FeishuPublishLog {
+  id                String   @id @default(cuid())
+  meetingId         String
+  docTitle          String
+  docUrl            String?
+  status            String
+  errorMessage      String?
+  cliCommandSummary String?
+  createdAt         DateTime @default(now())
+
+  meeting           Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@index([status])
+  @@map("feishu_publish_logs")
+}
+
+model YuquePublishLog {
+  id           String   @id @default(cuid())
+  meetingId    String
+  docTitle     String
+  docUrl       String?
+  namespace    String
+  publicLevel  Int
+  status       String
+  errorMessage String?
+  createdAt    DateTime @default(now())
+
+  meeting      Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@index([status])
+  @@map("yuque_publish_logs")
+}

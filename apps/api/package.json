@@ -1,0 +1,41 @@
+{
+  "name": "@meeting-ai-kit/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.0.0",
+    "@fastify/multipart": "^10.0.0",
+    "@fastify/static": "^8.0.0",
+    "@fastify/websocket": "^11.0.0",
+    "@meeting-ai-kit/asr-adapter": "workspace:*",
+    "@meeting-ai-kit/feishu-cli-adapter": "workspace:*",
+    "@meeting-ai-kit/llm-adapter": "workspace:*",
+    "@meeting-ai-kit/shared": "workspace:*",
+    "@prisma/client": "^6.0.0",
+    "docx": "^9.6.1",
+    "dotenv": "^16.4.0",
+    "fastify": "^5.0.0",
+    "mammoth": "^1.12.0",
+    "nodemailer": "^8.0.7",
+    "officeparser": "^6.1.1",
+    "pdf-parse": "^2.4.5",
+    "playwright": "^1.49.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "textract": "^2.5.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/nodemailer": "^8.0.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
