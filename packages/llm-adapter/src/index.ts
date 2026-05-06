@@ -65,14 +65,14 @@ export const LLM_PROVIDER_PRESETS = [
   },
   {
     id: "model_gateway",
-    name: "内部模型网关",
-    baseUrl: "http://101.37.38.251:9080/v1/chat/completions",
+    name: "模型网关",
+    baseUrl: "",
     compatibility: "openai_chat_completions"
   },
   {
     id: "custom_gateway",
     name: "自定义模型网关",
-    baseUrl: "http://101.37.38.251:9080/v1/chat/completions",
+    baseUrl: "",
     compatibility: "openai_chat_completions",
     defaultModel: "deepseek-v4-pro",
     defaultConfigName: "自定义网关 DeepSeek V4 Pro"

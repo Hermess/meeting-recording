@@ -1,0 +1,65 @@
+[
+  {
+    "text": "Meeting AI Kit / 智能妙记，把会议声音变成可交付结论。",
+    "startMs": 0,
+    "endMs": 5000,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "录音转写、AI 纪要、总结长图、Word / PNG 导出和语雀发布，一条主流程完成。",
+    "startMs": 5000,
+    "endMs": 10000,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "会议结束后，真正耗时的工作才开始。",
+    "startMs": 10000,
+    "endMs": 14000,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "讨论记录、关键决策、行动项和汇报材料分散在不同工具里。",
+    "startMs": 14000,
+    "endMs": 19000,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "智能妙记提供两种入口：现场录音实时转写，或上传、粘贴已有会议材料。",
+    "startMs": 19000,
+    "endMs": 25000,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "AI 会把转写整理成结构化纪要，保留 Markdown 正文和可复用的结构化数据。",
+    "startMs": 25000,
+    "endMs": 32000,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "关键共识、里程碑、风险卡片和行动项，会自动生成适合汇报转发的总结长图。",
+    "startMs": 32000,
+    "endMs": 40000,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "在 Review 页编辑确认后，可以导出 Word、PNG，也可以直接发布到语雀知识库。",
+    "startMs": 40000,
+    "endMs": 50000,
+    "timestampMs": null,
+    "confidence": null
+  },
+  {
+    "text": "让每一次会议，都留下清晰的下一步。",
+    "startMs": 50000,
+    "endMs": 56000,
+    "timestampMs": null,
+    "confidence": null
+  }
+]

@@ -198,8 +198,8 @@ export function SettingsClient() {
     setModelForm({
       ...defaultModelForm,
       provider: provider.id,
-      name: provider.defaultConfigName ?? (provider.id === "model_gateway" ? "内部模型网关-质量优先" : `${provider.name} 纪要模型`),
-      baseUrl: provider.id === "model_gateway" ? "http://101.37.38.251:9080/v1/chat/completions" : provider.baseUrl,
+      name: provider.defaultConfigName ?? (provider.id === "model_gateway" ? "模型网关配置" : `${provider.name} 纪要模型`),
+      baseUrl: provider.baseUrl,
       apiKey: provider.defaultApiKey ?? "",
       model: provider.defaultModel ?? defaultModelForProvider(provider.id),
       isDefault: models.length === 0

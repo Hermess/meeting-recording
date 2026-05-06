@@ -90,7 +90,7 @@ pnpm db:stop
 
 ```env
 LLM_PROVIDER="model_gateway"
-LLM_BASE_URL="http://101.37.38.251:9080/v1/chat/completions"
+LLM_BASE_URL="<your-openai-compatible-chat-completions-url>"
 LLM_MODEL="deepseek-v4-pro"
 LLM_MAX_TOKENS=12000
 LLM_TIMEOUT_MS=240000
