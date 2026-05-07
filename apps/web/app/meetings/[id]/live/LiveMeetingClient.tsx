@@ -52,7 +52,7 @@ type MicDeviceOption = {
   label: string;
 };
 
-const RECORDING_SLICE_MS = 5 * 60 * 1000;
+const RECORDING_SLICE_MS = 60 * 1000;
 const MIN_RECORDING_BLOB_BYTES = 1024;
 
 export function LiveMeetingClient({ initialMeeting }: { initialMeeting: MeetingDetail }) {
@@ -102,6 +102,7 @@ export function LiveMeetingClient({ initialMeeting }: { initialMeeting: MeetingD
   const silenceGainRef = useRef<GainNode | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingPartIndexRef = useRef(initialMeeting.recordingAssets?.length ?? 0);
+  const recordingSessionIdRef = useRef("");
   const recordingUploadPromisesRef = useRef<Array<Promise<RecordingAsset | null>>>([]);
   const recordingUploadedBytesRef = useRef((initialMeeting.recordingAssets ?? []).reduce((sum, asset) => sum + asset.sizeBytes, 0));
   const pcmBufferRef = useRef<Float32Array>(new Float32Array(0));
@@ -303,9 +304,10 @@ export function LiveMeetingClient({ initialMeeting }: { initialMeeting: MeetingD
     try {
       const mimeType = getSupportedRecordingMimeType();
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      recordingPartIndexRef.current = meeting.recordingAssets?.length ?? 0;
+      recordingSessionIdRef.current = `session-${Date.now()}`;
+      recordingPartIndexRef.current = 0;
       recordingUploadPromisesRef.current = [];
-      setRecordingUploadStatus(`录音按 ${Math.round(RECORDING_SLICE_MS / 60000)} 分钟分片保存，避免长会占用内存。`);
+      setRecordingUploadStatus("录音按 1 分钟分片保存，降低浏览器异常关闭时的丢失风险。");
       recorder.ondataavailable = (event) => {
         if (event.data.size >= MIN_RECORDING_BLOB_BYTES) {
           queueRecordingUpload(event.data);
@@ -319,6 +321,7 @@ export function LiveMeetingClient({ initialMeeting }: { initialMeeting: MeetingD
       mediaRecorderRef.current = recorder;
     } catch (error) {
       mediaRecorderRef.current = null;
+      recordingSessionIdRef.current = "";
       recordingUploadPromisesRef.current = [];
       setRecordingUploadStatus(error instanceof Error ? `录音文件保存未启动：${error.message}` : "录音文件保存未启动");
       setLastAsrMessage(error instanceof Error ? `录音文件保存未启动：${error.message}` : "录音文件保存未启动");
@@ -327,6 +330,7 @@ export function LiveMeetingClient({ initialMeeting }: { initialMeeting: MeetingD
 
   async function stopLocalRecorderAndUpload() {
     const recorder = mediaRecorderRef.current;
+    const sessionId = recordingSessionIdRef.current;
     if (!recorder) {
       return;
     }
@@ -353,10 +357,11 @@ export function LiveMeetingClient({ initialMeeting }: { initialMeeting: MeetingD
     if (savedCount > 0) {
       setRecordingUploadStatus(`录音已分片保存，共 ${recordingPartIndexRef.current} 个片段。`);
       setLastAsrMessage(`录音已分片保存，共 ${recordingPartIndexRef.current} 个片段`);
-      await mergeRecordingParts();
+      await mergeRecordingParts(sessionId);
     } else {
       setRecordingUploadStatus("未保存到有效录音片段。转写内容已保留。");
     }
+    recordingSessionIdRef.current = "";
   }
 
   function queueRecordingUpload(blob: Blob) {
@@ -377,8 +382,9 @@ export function LiveMeetingClient({ initialMeeting }: { initialMeeting: MeetingD
 
   async function uploadRecordingBlob(blob: Blob, partIndex: number) {
     const extension = getRecordingExtension(blob.type);
+    const sessionId = recordingSessionIdRef.current || `session-${Date.now()}`;
     const formData = new FormData();
-    formData.append("file", blob, `recording-part-${String(partIndex).padStart(3, "0")}-${new Date().toISOString().replace(/[:.]/g, "-")}.${extension}`);
+    formData.append("file", blob, `${sessionId}-recording-part-${String(partIndex).padStart(3, "0")}-${new Date().toISOString().replace(/[:.]/g, "-")}.${extension}`);
     const response = await fetch(`${apiBaseUrl}/api/meetings/${meeting.id}/recordings`, {
       method: "POST",
       credentials: "include",
@@ -409,9 +415,9 @@ export function LiveMeetingClient({ initialMeeting }: { initialMeeting: MeetingD
     return payload.data;
   }
 
-  async function mergeRecordingParts() {
+  async function mergeRecordingParts(sessionId?: string) {
     setRecordingUploadStatus("正在合成完整录音文件...");
-    const result = await apiPost<RecordingAsset>(`/api/meetings/${meeting.id}/recordings/merge`, {});
+    const result = await apiPost<RecordingAsset>(`/api/meetings/${meeting.id}/recordings/merge`, sessionId ? { sessionId } : {});
     if (result.error || !result.data) {
       setRecordingUploadStatus(result.error ? `录音分片已保存，完整文件合成失败：${result.error}` : "录音分片已保存，完整文件合成失败。");
       return;

@@ -8,6 +8,16 @@ export type ApiResult<T> = {
   [key: string]: unknown;
 };
 
+function formatApiError(payload: ApiResult<unknown> & { message?: string; issues?: Array<{ path?: string; message?: string }> }, fallback: string) {
+  if (payload.message) return payload.message;
+  if (payload.issues?.length) {
+    return payload.issues
+      .map((issue) => `${issue.path ? `${issue.path}：` : ""}${issue.message ?? "参数不合法"}`)
+      .join("；");
+  }
+  return typeof payload.error === "string" ? payload.error : fallback;
+}
+
 export async function apiGet<T>(path: string): Promise<ApiResult<T>> {
   try {
     const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -18,7 +28,7 @@ export async function apiGet<T>(path: string): Promise<ApiResult<T>> {
     const payload = (await response.json().catch(() => ({}))) as ApiResult<T> & { message?: string };
 
     if (!response.ok) {
-      return { error: payload.message || payload.error || `${response.status} ${response.statusText}` };
+      return { error: formatApiError(payload, `${response.status} ${response.statusText}`) };
     }
 
     return payload.data === undefined ? { ...payload, data: payload as T } : payload;
@@ -43,7 +53,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<ApiResult
     const payload = (await response.json().catch(() => ({}))) as ApiResult<T> & { message?: string };
 
     if (!response.ok) {
-      return { error: payload.message || payload.error || `${response.status} ${response.statusText}` };
+      return { error: formatApiError(payload, `${response.status} ${response.statusText}`) };
     }
 
     return payload.data === undefined ? { ...payload, data: payload as T } : payload;
@@ -68,7 +78,7 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<ApiResul
     const payload = (await response.json().catch(() => ({}))) as ApiResult<T> & { message?: string };
 
     if (!response.ok) {
-      return { error: payload.message || payload.error || `${response.status} ${response.statusText}` };
+      return { error: formatApiError(payload, `${response.status} ${response.statusText}`) };
     }
 
     return payload.data === undefined ? { ...payload, data: payload as T } : payload;
@@ -89,7 +99,7 @@ export async function apiDelete<T>(path: string): Promise<ApiResult<T>> {
     const payload = (await response.json().catch(() => ({}))) as ApiResult<T> & { message?: string };
 
     if (!response.ok) {
-      return { error: payload.message || payload.error || `${response.status} ${response.statusText}` };
+      return { error: formatApiError(payload, `${response.status} ${response.statusText}`) };
     }
 
     return payload.data === undefined ? { ...payload, data: payload as T } : payload;

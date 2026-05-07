@@ -128,6 +128,8 @@ export function SettingsClient() {
   const [yuqueRepos, setYuqueRepos] = useState<YuqueRepo[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [tested, setTested] = useState<Record<string, boolean>>({});
+  const [isTestingModel, setIsTestingModel] = useState(false);
+  const [modelTestMessage, setModelTestMessage] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null);
 
   const defaultModel = useMemo(() => models.find((model) => model.isDefault) ?? null, [models]);
 
@@ -191,6 +193,7 @@ export function SettingsClient() {
         : defaultModelForm
     );
     setTested((current) => ({ ...current, model: false }));
+    setModelTestMessage(null);
     setModal("model");
   }
 
@@ -205,19 +208,75 @@ export function SettingsClient() {
       isDefault: models.length === 0
     });
     setTested((current) => ({ ...current, model: false }));
+    setModelTestMessage(null);
     setModal("model");
   }
 
+  function updateModelForm(patch: Partial<typeof defaultModelForm>) {
+    setModelForm((current) => ({ ...current, ...patch }));
+    setTested((current) => ({ ...current, model: false }));
+    setModelTestMessage(null);
+  }
+
+  function validateModelFormForTest() {
+    if (!modelForm.name.trim()) return "请填写配置名称，配置名称用于新建会议时选择纪要模型。";
+    if (!modelForm.provider.trim()) return "请填写供应商 / 网关类型。";
+    if (!modelForm.baseUrl.trim()) return "请填写模型网关 URL。";
+    try {
+      new URL(modelForm.baseUrl);
+    } catch {
+      return "模型网关 URL 格式不正确，请填写完整地址，例如 https://api.example.com/v1。";
+    }
+    if (!modelForm.model.trim()) return "请填写模型名称，也就是网关实际接收的 model 字段。";
+    const editingModel = models.find((model) => model.id === modelForm.id);
+    const providerNeedsKey = modelForm.provider !== "ollama";
+    if (providerNeedsKey && !modelForm.apiKey.trim() && !editingModel?.apiKeySet) {
+      return "请填写 API Key / AK。已有配置如果密钥已保存，可以留空测试；新增配置必须填写。";
+    }
+    for (const [label, value] of [
+      ["Temperature", modelForm.temperature],
+      ["Max Tokens", modelForm.maxTokens],
+      ["Timeout(ms)", modelForm.timeoutMs],
+      ["Retry Count", modelForm.retryCount]
+    ] as const) {
+      if (!Number.isFinite(Number(value))) {
+        return `${label} 必须是数字。`;
+      }
+    }
+    return null;
+  }
+
   async function testDraftModel() {
-    setMessage("正在测试模型网关...");
-    const result = await apiPost<{ ok: boolean; message: string }>("/api/config/models/test-draft", modelPayload());
-    setTested((current) => ({ ...current, model: Boolean(result.data?.ok) }));
-    setMessage(result.data?.message ?? result.error ?? "模型网关测试失败");
+    const validationError = validateModelFormForTest();
+    if (validationError) {
+      setTested((current) => ({ ...current, model: false }));
+      setModelTestMessage({ tone: "error", text: validationError });
+      setMessage(validationError);
+      return;
+    }
+
+    const testingText = "正在测试模型网关，请稍候...";
+    setIsTestingModel(true);
+    setModelTestMessage({ tone: "info", text: testingText });
+    setMessage(testingText);
+    try {
+      const result = modelForm.id
+        ? await apiPost<{ ok: boolean; message: string }>(`/api/config/models/${modelForm.id}/test`, modelPayload())
+        : await apiPost<{ ok: boolean; message: string }>("/api/config/models/test-draft", modelPayload());
+      const ok = Boolean(result.data?.ok);
+      const text = result.data?.message ?? result.error ?? "模型网关测试失败";
+      setTested((current) => ({ ...current, model: ok }));
+      setModelTestMessage({ tone: ok ? "success" : "error", text });
+      setMessage(text);
+    } finally {
+      setIsTestingModel(false);
+    }
   }
 
   async function saveModel() {
     if (!tested.model) {
       setMessage("请先测试通过模型网关，再保存配置。");
+      setModelTestMessage({ tone: "error", text: "请先测试通过模型网关，再保存配置。" });
       return;
     }
     const result = modelForm.id
@@ -225,6 +284,7 @@ export function SettingsClient() {
       : await apiPost<ModelConfigRow>("/api/config/models", modelPayload());
     if (result.error) {
       setMessage(result.error);
+      setModelTestMessage({ tone: "error", text: result.error });
       return;
     }
     setMessage("模型配置已保存");
@@ -488,25 +548,26 @@ export function SettingsClient() {
       {modal === "model" ? (
         <Modal title={modelForm.id ? "编辑模型网关配置" : "新增模型网关配置"} onClose={() => setModal(null)}>
           <div className="grid gap-3">
-            <TextField helper="配置名称给业务人员选择，例如“默认纪要模型”。模型名称才是实际 model 字段。" label="配置名称" value={modelForm.name} onChange={(name) => setModelForm((current) => ({ ...current, name }))} />
-            <TextField label="供应商 / 网关类型" value={modelForm.provider} onChange={(provider) => setModelForm((current) => ({ ...current, provider }))} />
-            <TextField label="模型网关 URL" value={modelForm.baseUrl} onChange={(baseUrl) => setModelForm((current) => ({ ...current, baseUrl }))} />
-            <TextField label="模型名称" value={modelForm.model} onChange={(model) => setModelForm((current) => ({ ...current, model }))} />
+            <TextField helper="配置名称给业务人员选择，例如“默认纪要模型”。模型名称才是实际 model 字段。" label="配置名称" value={modelForm.name} onChange={(name) => updateModelForm({ name })} />
+            <TextField label="供应商 / 网关类型" value={modelForm.provider} onChange={(provider) => updateModelForm({ provider })} />
+            <TextField label="模型网关 URL" value={modelForm.baseUrl} onChange={(baseUrl) => updateModelForm({ baseUrl })} />
+            <TextField label="模型名称" value={modelForm.model} onChange={(model) => updateModelForm({ model })} />
             <TextField
-              {...(modelForm.id ? { helper: "留空表示不覆盖已有 AK；如果要重新测试，请重新输入 AK。" } : {})}
+              {...(modelForm.id ? { helper: "留空表示沿用已保存 AK；测试时会用当前表单参数加已保存 AK 联通。" } : {})}
               label="API Key / AK"
               type="password"
               value={modelForm.apiKey}
-              onChange={(apiKey) => setModelForm((current) => ({ ...current, apiKey }))}
+              onChange={(apiKey) => updateModelForm({ apiKey })}
             />
             <div className="grid gap-3 md:grid-cols-3">
-              <TextField label="Temperature" value={modelForm.temperature} onChange={(temperature) => setModelForm((current) => ({ ...current, temperature }))} />
-              <TextField label="Max Tokens" value={modelForm.maxTokens} onChange={(maxTokens) => setModelForm((current) => ({ ...current, maxTokens }))} />
-              <TextField label="Timeout(ms)" value={modelForm.timeoutMs} onChange={(timeoutMs) => setModelForm((current) => ({ ...current, timeoutMs }))} />
+              <TextField label="Temperature" value={modelForm.temperature} onChange={(temperature) => updateModelForm({ temperature })} />
+              <TextField label="Max Tokens" value={modelForm.maxTokens} onChange={(maxTokens) => updateModelForm({ maxTokens })} />
+              <TextField label="Timeout(ms)" value={modelForm.timeoutMs} onChange={(timeoutMs) => updateModelForm({ timeoutMs })} />
             </div>
-            <CheckboxField label="启用此模型配置" checked={modelForm.enabled} onChange={(enabled) => setModelForm((current) => ({ ...current, enabled }))} />
-            <CheckboxField label="设为默认纪要模型" checked={modelForm.isDefault} onChange={(isDefault) => setModelForm((current) => ({ ...current, isDefault }))} />
-            <ModalActions canSave={Boolean(tested.model)} onSave={() => void saveModel()} onTest={() => void testDraftModel()} saveLabel="保存模型" testLabel="测试模型" />
+            <CheckboxField label="启用此模型配置" checked={modelForm.enabled} onChange={(enabled) => updateModelForm({ enabled })} />
+            <CheckboxField label="设为默认纪要模型" checked={modelForm.isDefault} onChange={(isDefault) => updateModelForm({ isDefault })} />
+            {modelTestMessage ? <ModalNotice text={modelTestMessage.text} tone={modelTestMessage.tone} /> : null}
+            <ModalActions canSave={Boolean(tested.model)} isTesting={isTestingModel} onSave={() => void saveModel()} onTest={() => void testDraftModel()} saveLabel="保存模型" testLabel="测试模型" />
           </div>
         </Modal>
       ) : null}
@@ -649,10 +710,36 @@ function Modal({ title, children, onClose }: { title: string; children: ReactNod
   );
 }
 
-function ModalActions({ testLabel, saveLabel, canSave, onTest, onSave }: { testLabel: string; saveLabel: string; canSave: boolean; onTest: () => void; onSave: () => void }) {
+function ModalNotice({ tone, text }: { tone: "info" | "success" | "error"; text: string }) {
+  const toneClass =
+    tone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : tone === "error"
+        ? "border-rose-200 bg-rose-50 text-rose-800"
+        : "border-blue-200 bg-blue-50 text-blue-800";
+  return <p className={`rounded-md border px-3 py-2 text-sm leading-6 ${toneClass}`}>{text}</p>;
+}
+
+function ModalActions({
+  testLabel,
+  saveLabel,
+  canSave,
+  isTesting = false,
+  onTest,
+  onSave
+}: {
+  testLabel: string;
+  saveLabel: string;
+  canSave: boolean;
+  isTesting?: boolean;
+  onTest: () => void;
+  onSave: () => void;
+}) {
   return (
     <div className="flex justify-end gap-3">
-      <button className="btn-secondary" onClick={onTest} type="button">{testLabel}</button>
+      <button className="btn-secondary disabled:cursor-not-allowed disabled:opacity-60" disabled={isTesting} onClick={onTest} type="button">
+        {isTesting ? "测试中..." : testLabel}
+      </button>
       <button className="btn-primary disabled:opacity-50" disabled={!canSave} onClick={onSave} type="button">{saveLabel}</button>
     </div>
   );

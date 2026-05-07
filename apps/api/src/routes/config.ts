@@ -454,6 +454,10 @@ export async function registerConfigRoutes(app: FastifyInstance) {
     if (!params.success) {
       return sendZodError(reply, params.error);
     }
+    const parsed = UpsertModelConfigInputSchema.partial().safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return sendZodError(reply, parsed.error);
+    }
 
     const model = await prisma.modelConfig.findFirst({
       where: scopedConfigWhere(auth, params.data.id)
@@ -463,7 +467,21 @@ export async function registerConfigRoutes(app: FastifyInstance) {
     }
 
     const adapter = new OpenAiCompatibleMeetingMinutesLlmAdapter();
-    const result = await adapter.testConnection(toLlmConfig(model));
+    const result = await adapter.testConnection({
+      id: model.id,
+      name: parsed.data.name ?? model.name,
+      provider: (parsed.data.provider ?? model.provider) as LlmAdapterConfig["provider"],
+      baseUrl: parsed.data.baseUrl ?? model.baseUrl,
+      apiKeyEncrypted: parsed.data.apiKey ?? decryptSecret(model.apiKeyEncrypted),
+      model: parsed.data.model ?? model.model,
+      temperature: parsed.data.temperature ?? model.temperature,
+      maxTokens: parsed.data.maxTokens ?? model.maxTokens,
+      jsonMode: parsed.data.jsonMode ?? model.jsonMode,
+      timeoutMs: parsed.data.timeoutMs ?? model.timeoutMs,
+      retryCount: parsed.data.retryCount ?? model.retryCount,
+      enabled: parsed.data.enabled ?? model.enabled,
+      isDefault: parsed.data.isDefault ?? model.isDefault
+    });
     return {
       ok: result.ok,
       message: result.message

@@ -1,7 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -23,6 +22,10 @@ const ListMeetingsQuerySchema = z.object({
 
 const MeetingParamsSchema = z.object({
   id: z.string().min(1)
+});
+
+const MergeRecordingsBodySchema = z.object({
+  sessionId: z.string().trim().min(1).optional()
 });
 
 export async function registerMeetingRoutes(app: FastifyInstance) {
@@ -342,52 +345,50 @@ export async function registerMeetingRoutes(app: FastifyInstance) {
     if (!meeting) {
       return sendNotFound(reply, "Meeting");
     }
+    const parsedBody = MergeRecordingsBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return sendZodError(reply, parsedBody.error);
+    }
+    const sessionId = parsedBody.data.sessionId;
 
     const recordings = await prisma.recordingAsset.findMany({
       where: { meetingId: params.id },
       orderBy: { createdAt: "asc" }
     });
-    const parts = recordings.filter((recording) => isRecordingPart(recording.filename, recording.originalName));
+    const parts = recordings
+      .filter((recording) => isRecordingPart(recording.filename, recording.originalName))
+      .filter((recording) => !sessionId || isRecordingSessionPart(recording.filename, recording.originalName, sessionId))
+      .sort(compareRecordingParts);
     if (parts.length === 0) {
       return reply.code(400).send({
         error: "no_recording_parts",
         message: "没有可合成的录音分片。"
       });
     }
-    if (parts.length === 1) {
-      return { data: serializeRecordingAsset(parts[0]!), merged: false };
-    }
     const firstPart = parts[0]!;
     const lastPart = parts[parts.length - 1]!;
+    const totalPartBytes = parts.reduce((sum, part) => sum + part.sizeBytes, 0);
 
     const existingMerged = recordings
       .filter((recording) => isMergedRecording(recording.filename, recording.originalName))
+      .filter((recording) => !sessionId || isRecordingSessionPart(recording.filename, recording.originalName, sessionId))
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0];
-    if (existingMerged && existingMerged.createdAt > lastPart.createdAt) {
+    if (existingMerged && existingMerged.createdAt > lastPart.createdAt && existingMerged.sizeBytes >= totalPartBytes * 0.9) {
       return { data: serializeRecordingAsset(existingMerged), merged: true, reused: true };
     }
 
     const extension = getAudioExtension(firstPart.filename, firstPart.mimeType);
-    const filename = `${Date.now()}-complete-recording.${extension}`;
+    const filename = `${Date.now()}-${sessionId ? `${sessionId}-` : ""}complete-recording.${extension}`;
     const storagePath = resolveStoragePath("recordings", params.id, filename);
     await mkdir(path.dirname(storagePath), { recursive: true });
 
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), "meeting-recording-"));
-    const concatListPath = path.join(tempDir, "recording-parts.txt");
-    const concatList = parts
-      .map((recording) => `file '${recording.storagePath.replaceAll("'", "'\\''")}'`)
-      .join("\n");
-    await writeFile(concatListPath, concatList);
-
     try {
-      await runFfmpeg(["-y", "-f", "concat", "-safe", "0", "-i", concatListPath, "-c", "copy", storagePath]);
+      await concatenateRecordingParts(parts.map((recording) => recording.storagePath), storagePath);
     } catch (error) {
       return reply.code(500).send({
         error: "recording_merge_failed",
-        message: error instanceof Error ? error.message : "录音分片合成失败，请确认服务器已安装 ffmpeg。"
+        message: error instanceof Error ? error.message : "录音分片合成失败。"
       });
-    } finally {
-      await rm(tempDir, { recursive: true, force: true });
     }
 
     const sizeBytes = await fileSize(storagePath);
@@ -395,7 +396,7 @@ export async function registerMeetingRoutes(app: FastifyInstance) {
       data: {
         meetingId: params.id,
         filename,
-        originalName: `完整录音.${extension}`,
+        originalName: sessionId ? `完整录音-${sessionId}.${extension}` : `完整录音.${extension}`,
         mimeType: firstPart.mimeType,
         sizeBytes,
         storagePath,
@@ -523,26 +524,67 @@ function isMergedRecording(filename: string, originalName?: string | null) {
   return filename.includes("complete-recording") || Boolean(originalName?.includes("完整录音"));
 }
 
+function isRecordingSessionPart(filename: string, originalName: string | null | undefined, sessionId: string) {
+  return filename.includes(sessionId) || Boolean(originalName?.includes(sessionId));
+}
+
+function compareRecordingParts(left: { filename: string; originalName?: string | null; createdAt: Date }, right: { filename: string; originalName?: string | null; createdAt: Date }) {
+  const leftIndex = extractRecordingPartIndex(left.filename, left.originalName);
+  const rightIndex = extractRecordingPartIndex(right.filename, right.originalName);
+  if (leftIndex !== rightIndex) {
+    return leftIndex - rightIndex;
+  }
+  return left.createdAt.getTime() - right.createdAt.getTime();
+}
+
+function extractRecordingPartIndex(filename: string, originalName?: string | null) {
+  const source = `${originalName ?? ""} ${filename}`;
+  const match = source.match(/recording-part-(\d+)/);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
 async function fileSize(filePath: string) {
   const { stat } = await import("node:fs/promises");
   return (await stat(filePath)).size;
 }
 
-function runFfmpeg(args: string[]) {
-  return new Promise<void>((resolve, reject) => {
-    const child = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
-    let stderr = "";
-    child.stderr.on("data", (chunk) => {
-      stderr += String(chunk);
-    });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(stderr.trim() || `ffmpeg exited with code ${code}`));
+async function concatenateRecordingParts(partPaths: string[], outputPath: string) {
+  const output = createWriteStream(outputPath);
+  try {
+    for (const partPath of partPaths) {
+      const input = createReadStream(partPath);
+      for await (const chunk of input) {
+        if (!output.write(chunk)) {
+          await waitForDrain(output);
+        }
       }
+    }
+    await new Promise<void>((resolve, reject) => {
+      output.end(resolve);
+      output.once("error", reject);
     });
+  } catch (error) {
+    output.destroy();
+    throw error;
+  }
+}
+
+function waitForDrain(output: NodeJS.WritableStream) {
+  return new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      output.off("drain", onDrain);
+      output.off("error", onError);
+    };
+    const onDrain = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    output.once("drain", onDrain);
+    output.once("error", onError);
   });
 }
 
